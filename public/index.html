@@ -9,6 +9,20 @@
   <meta property="og:description" content="Turn any photo into a 3D world you can walk through." />
   <title>DepthDiver — Turn any photo into 3D</title>
   <link rel="stylesheet" href="/app.css" />
+
+  <!--
+    Import map: tells the browser where to find bare ES module specifiers.
+    GaussianSplats3D imports from 'three' (no path prefix) — browsers can't
+    resolve that without this map. Must appear before any type="module" script.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
 <div id="app">
