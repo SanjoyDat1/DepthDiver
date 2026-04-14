@@ -33,10 +33,16 @@
 
     <!-- Config warning (shown when backend URL is still localhost) -->
     <div id="config-warning" hidden>
-      <strong>⚠ Backend not connected.</strong>
-      You're running locally or the backend URL is not yet set.
-      See <a href="https://github.com/your-repo/DepthDiver#deploy" target="_blank">deployment guide</a>
-      or edit <code>public/config.js</code>.
+      <strong>⚠ One more step before this works.</strong><br/>
+      The 3D generation service (SHARP backend) is not connected yet —
+      photos will fail to process. You need to deploy the
+      <code>backend/</code> folder to
+      <a href="https://render.com" target="_blank" rel="noopener">Render.com</a>
+      (free), then add your backend URL as <code>BACKEND_URL</code>
+      in your
+      <a href="https://app.netlify.com" target="_blank" rel="noopener">Netlify environment variables</a>
+      and redeploy. Full instructions in the
+      <a href="https://github.com/SanjoyDat1/DepthDiver#deploy-in-3-steps" target="_blank" rel="noopener">README →</a>
     </div>
 
     <!-- Drop / upload zone -->
@@ -115,13 +121,8 @@
       <div class="proc-fact"    id="proc-fact"></div>
     </div>
 
-    <!-- Error card (shown on failure) -->
-    <div id="proc-error">
-      <strong id="proc-err-title">Something went wrong</strong>
-      <span id="proc-err-msg"></span>
-      <br />
-      <button class="retry-btn" onclick="window.location.reload()">← Try again</button>
-    </div>
+    <!-- Error card (shown on failure, content filled by JS) -->
+    <div id="proc-error"></div>
   </section><!-- /screen-processing -->
 
 

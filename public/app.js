@@ -9,6 +9,10 @@ const BACKEND_URL = (CFG.backendUrl || "http://localhost:8000").replace(/\/$/, "
 const GSP_CDN =
   "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4/build/gaussian-splats-3d.module.js";
 
+// Is the backend URL still pointing at localhost (= not yet deployed)?
+const BACKEND_IS_LOCAL =
+  BACKEND_URL.includes("localhost") || BACKEND_URL.includes("127.0.0.1");
+
 // ─── Content ─────────────────────────────────────────────────────────────────
 const FUN_FACTS = [
   "SHARP generates over 1 million tiny 3D blobs from a single photo.",
@@ -157,9 +161,9 @@ function initModeCards() {
 function checkConfigWarning() {
   const warn = $("#config-warning");
   if (!warn) return;
-  const isLocal = BACKEND_URL.includes("localhost") || BACKEND_URL.includes("127.0.0.1");
-  const needsBackend = isLocal && S.file;
-  if (needsBackend) { show(warn); }
+  // Show warning whenever backend is localhost — regardless of whether a file
+  // is chosen — so the user knows before they even try.
+  if (BACKEND_IS_LOCAL) { show(warn); }
   else { hide(warn); }
 }
 
@@ -325,10 +329,35 @@ async function createScene() {
     setStep("read",  "done");
     setStep("build", "active", "Building the 3D world…");
 
+    // Guard: backend not configured yet
+    if (BACKEND_IS_LOCAL && location.protocol === "https:") {
+      throw new Error(
+        "Backend not connected. " +
+        "The 3D generation service needs to be deployed separately (it can't run inside Netlify). " +
+        "Deploy the backend/ folder to Render.com, then set BACKEND_URL in your Netlify environment variables. " +
+        "See the README for step-by-step instructions."
+      );
+    }
+
     const formData = new FormData();
     formData.append("file", S.file, S.file.name || "photo.jpg");
 
-    const res = await fetch(`${BACKEND_URL}/generate`, { method: "POST", body: formData });
+    let res;
+    try {
+      res = await fetch(`${BACKEND_URL}/generate`, { method: "POST", body: formData });
+    } catch (networkErr) {
+      // Safari says "Load failed", Chrome says "Failed to fetch"
+      const msg = String(networkErr.message || networkErr);
+      if (msg.toLowerCase().includes("load failed") || msg.toLowerCase().includes("failed to fetch")) {
+        throw new Error(
+          BACKEND_IS_LOCAL
+            ? "Backend not connected — deploy backend/ to Render and set BACKEND_URL in Netlify."
+            : `Cannot reach the backend at ${BACKEND_URL}. ` +
+              "Check that your Render service is running (visit its /health URL) and that CORS is enabled."
+        );
+      }
+      throw networkErr;
+    }
 
     if (!res.ok) {
       let detail = `Backend error ${res.status}`;
@@ -381,11 +410,32 @@ async function createScene() {
   } catch (err) {
     stopElapsed();
     console.error("Pipeline error:", err);
+
+    const msg = String(err.message || err);
+    const isSetup = msg.toLowerCase().includes("backend not connected") ||
+                    msg.toLowerCase().includes("backend_url");
+
     errEl.classList.add("visible");
-    errEl.innerHTML = `
-      <strong>Something went wrong</strong>
-      ${escHtml(err.message)}
-      <br><button class="retry-btn" onclick="location.reload()">← Try again</button>`;
+    errEl.innerHTML = isSetup
+      ? `<strong>Backend not connected</strong>
+         The 3D generation service isn't set up yet. Here's what to do:
+         <ol style="margin:10px 0 10px 18px;line-height:1.9;font-size:0.85rem">
+           <li>Deploy the <code>backend/</code> folder to
+               <a href="https://render.com" target="_blank" style="color:#93c5fd">Render.com</a>
+               (free tier, takes ~10 min first build)</li>
+           <li>Copy your Render service URL</li>
+           <li>In Netlify → Site settings → Environment variables, add
+               <code>BACKEND_URL = https://your-service.onrender.com</code></li>
+           <li>Trigger a Netlify redeploy</li>
+         </ol>
+         <a href="https://github.com/SanjoyDat1/DepthDiver#deploy-in-3-steps"
+            target="_blank" style="color:#93c5fd;font-weight:600">
+           Full guide in the README →
+         </a>
+         <br><button class="retry-btn" onclick="location.reload()" style="margin-top:14px">← Back</button>`
+      : `<strong>Something went wrong</strong>
+         ${escHtml(msg)}
+         <br><button class="retry-btn" onclick="location.reload()">← Try again</button>`;
   }
 }
 
@@ -757,7 +807,7 @@ function boot() {
     }
   });
 
-  // Show config warning if backend not set
+  // Show config warning immediately on load if backend is still localhost
   checkConfigWarning();
 
   // Hide AI section + QA card by default
