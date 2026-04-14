@@ -140,6 +140,22 @@ def job_status(job_id: str):
 
 @app.get("/jobs/{job_id}/result")
 def job_result(job_id: str):
+    """Download endpoint — same as /scene.ply but triggers cleanup after serving."""
+    return _serve_ply(job_id, cleanup=True)
+
+
+@app.get("/jobs/{job_id}/scene.ply")
+def job_scene_ply(job_id: str):
+    """
+    Viewer-friendly endpoint whose URL ends in '.ply' so loaders can
+    auto-detect the file format without needing an explicit format hint.
+    Does NOT trigger cleanup — the TTL daemon handles that — so the file
+    can be fetched multiple times (viewer + download button).
+    """
+    return _serve_ply(job_id, cleanup=False)
+
+
+def _serve_ply(job_id: str, *, cleanup: bool) -> FileResponse:
     job = _get_job(job_id)
     if job is None:
         raise HTTPException(404, detail="Job not found (may have expired).")
@@ -152,13 +168,13 @@ def job_result(job_id: str):
     if not ply_path.exists():
         raise HTTPException(500, detail="Result file not found on server.")
 
-    log.info("[%s] Serving result (%.1f MB)", job_id, ply_path.stat().st_size / 1e6)
+    log.info("[%s] Serving PLY (%.1f MB, cleanup=%s)", job_id, ply_path.stat().st_size / 1e6, cleanup)
 
     return FileResponse(
         str(ply_path),
         media_type="application/octet-stream",
         filename="scene.ply",
-        background=_CleanupTask(job_id, Path(job["run_dir"])),
+        background=_CleanupTask(job_id, Path(job["run_dir"])) if cleanup else None,
     )
 
 

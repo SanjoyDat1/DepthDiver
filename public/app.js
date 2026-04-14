@@ -423,36 +423,15 @@ async function createScene() {
     const { job_id } = await submitRes.json();
     setStep("build", "active", "Building the 3D world…");
 
-    // Step 3: Poll until SHARP finishes (no long-lived connection = no Cloudflare timeout)
+    // Step 3: Poll until SHARP finishes
     await pollUntilDone(job_id);
     setStep("build",  "done");
-    setStep("finish", "active", "Downloading your 3D scene…");
-
-    // Step 4: Download the finished .ply
-    let plyRes;
-    try {
-      plyRes = await fetchWithRetry(`${BACKEND_URL}/jobs/${job_id}/result`);
-    } catch (networkErr) {
-      throw networkFriendlyError(networkErr);
-    }
-    if (!plyRes.ok) {
-      const d = await plyRes.json().then(j => j.detail).catch(() => `Error ${plyRes.status}`);
-      throw new Error(d);
-    }
-
-    let plyBytes;
-    try {
-      plyBytes = await plyRes.arrayBuffer();
-    } catch {
-      throw new Error("Download dropped — check your signal and try again.");
-    }
-
-    S.plyBytes = plyBytes;
-    const plyBlob = new Blob([S.plyBytes], { type: "application/octet-stream" });
-    if (S.plyUrl) URL.revokeObjectURL(S.plyUrl);
-    S.plyUrl = URL.createObjectURL(plyBlob);
-
     setStep("finish", "done");
+
+    // The PLY is served at a URL that ends in ".ply" so GaussianSplats3D can
+    // auto-detect the format — no blob URL, no format-detection errors.
+    // The viewer streams it directly from the backend, which is also faster.
+    S.plyUrl = `${BACKEND_URL}/jobs/${job_id}/scene.ply`;
 
     // Step 4: wait for analysis if it's still running
     if (analysisPromise) {
@@ -528,10 +507,9 @@ async function initViewer(plyUrl) {
   loadWrap.classList.add("visible");
   loadBar.style.width = "0%";
 
-  // Import both Viewer and SceneFormat so we can tell the viewer that our
-  // blob URL contains a PLY file — blob: URLs have no extension, so the
-  // viewer can't auto-detect the format and throws "File format not supported".
-  const { Viewer, SceneFormat } = await import(GSP_CDN);
+  // URL ends in ".ply" so GaussianSplats3D auto-detects format — no explicit
+  // SceneFormat needed.
+  const { Viewer } = await import(GSP_CDN);
 
   const viewer = new Viewer({
     selfDrivenMode:         true,
@@ -544,11 +522,7 @@ async function initViewer(plyUrl) {
 
   S.viewer = viewer;
 
-  // SceneFormat.Ply = 0  (must be explicit because blob URLs have no extension)
-  const plyFormat = SceneFormat?.Ply ?? 0;
-
   await viewer.addSplatScene(plyUrl, {
-    format:                     plyFormat,
     splatAlphaRemovalThreshold: 5,
     showLoadingUI:              false,
     onProgress: (p) => {
@@ -715,13 +689,18 @@ function initBottomSheet() {
 function renderSheet() {
   const scroll = $("#sheet-scroll");
 
-  // Download button — uses blob URL
+  // Download button — fetches from the /result endpoint (triggers server-side cleanup)
   const dlBtn = $("#sheet-dl");
   dlBtn.addEventListener("click", () => {
+    // S.plyUrl is now a backend URL ending in /scene.ply — add ?download=1 to
+    // signal intent; the browser's <a download> attribute forces a Save dialog.
+    const dlUrl = S.plyUrl.replace("/scene.ply", "/result");
     const a = document.createElement("a");
-    a.href = S.plyUrl;
+    a.href = dlUrl;
     a.download = "depthdiver_scene.ply";
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
   });
 
   // SuperSplat link
@@ -860,7 +839,7 @@ function boot() {
 
   // Create another
   $("#create-another-btn").addEventListener("click", () => {
-    if (S.plyUrl) URL.revokeObjectURL(S.plyUrl);
+    // S.plyUrl is a backend URL (not a blob), nothing to revoke
     if (S.viewer) { try { S.viewer.dispose(); } catch {} S.viewer = null; }
     S.file = S.plyUrl = S.sceneData = S.qaData = S.plyBytes = null;
     S.mode = "free"; S.apiKey = "";
