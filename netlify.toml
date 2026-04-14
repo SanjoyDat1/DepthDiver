@@ -9,16 +9,19 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# ── Security & COOP headers ───────────────────────────────────────────────────
+# ── Security headers ──────────────────────────────────────────────────────────
+# NOTE: We do NOT set Cross-Origin-Embedder-Policy: require-corp because:
+#   1. The 3D viewer uses sharedMemoryForWorkers:false, so SharedArrayBuffer
+#      is not needed and COEP is unnecessary.
+#   2. COEP: require-corp blocks ALL cross-origin fetches (to Render backend
+#      and to jsdelivr CDN) unless those servers also set
+#      Cross-Origin-Resource-Policy: cross-origin — which they don't.
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options              = "DENY"
-    X-Content-Type-Options       = "nosniff"
-    Referrer-Policy              = "strict-origin-when-cross-origin"
-    # SharedArrayBuffer needed by GaussianSplats3D web workers
-    Cross-Origin-Opener-Policy   = "same-origin"
-    Cross-Origin-Embedder-Policy = "require-corp"
+    X-Frame-Options        = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
 
 [[headers]]
   for = "/*.js"

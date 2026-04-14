@@ -41,8 +41,20 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["content-disposition"],
+    expose_headers=["content-disposition", "cross-origin-resource-policy"],
 )
+
+
+@app.middleware("http")
+async def add_permissive_headers(request: Request, call_next):
+    """
+    Add Cross-Origin-Resource-Policy: cross-origin so this API works
+    from pages that set Cross-Origin-Embedder-Policy: require-corp.
+    """
+    response = await call_next(request)
+    response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    return response
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

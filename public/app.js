@@ -361,15 +361,30 @@ async function createScene() {
 
     if (!res.ok) {
       let detail = `Backend error ${res.status}`;
-      try { const j = await res.json(); detail = j.detail || detail; } catch {}
+      if (res.status === 503) {
+        detail = "The 3D server is warming up (Render free tier). Wait 30 seconds and try again.";
+      } else if (res.status === 524 || res.status === 504) {
+        detail = "The 3D generation took too long and timed out. Try a simpler photo, or upgrade the Render plan.";
+      } else {
+        try { const j = await res.json(); detail = j.detail || detail; } catch {}
+      }
       throw new Error(detail);
     }
 
-    // Step 3: receive PLY
+    // Step 3: stream PLY bytes back (can be 30–150 MB)
     setStep("build",  "done");
-    setStep("finish", "active", "Polishing the details…");
+    setStep("finish", "active", "Downloading your 3D scene…");
 
-    S.plyBytes = await res.arrayBuffer();
+    let S_plyBytes;
+    try {
+      S_plyBytes = await res.arrayBuffer();
+    } catch (dlErr) {
+      throw new Error(
+        "The 3D file started downloading but the connection dropped. " +
+        "This can happen on a weak mobile signal. Please try again."
+      );
+    }
+    S.plyBytes = S_plyBytes;
     const plyBlob = new Blob([S.plyBytes], { type: "application/octet-stream" });
     if (S.plyUrl) URL.revokeObjectURL(S.plyUrl);
     S.plyUrl = URL.createObjectURL(plyBlob);
