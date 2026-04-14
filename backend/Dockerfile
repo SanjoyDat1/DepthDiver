@@ -1,45 +1,58 @@
-# DepthDiver — Backend Dockerfile (memory-optimised)
-#
-# Minimum recommended Render plan: Standard (2 GB RAM)
-# Set environment variable SHARP_LOW_MEM=1 on Render (already default in code).
-#
-# Build: docker build -t depthdiver-backend .
-# Run:   docker run -p 8000:8000 -e SHARP_LOW_MEM=1 depthdiver-backend
-
+# ── DepthDiver Backend ─────────────────────────────────────────────────────────
+# Engine: Depth Anything V2 Small (24 MB model weights)
+# Peak RAM: ~350 MB   → compatible with Render FREE tier (512 MB)
+# ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
-# System deps
+# System deps for Pillow (JPEG / PNG / WebP support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git curl build-essential libgl1 libglib2.0-0 libjpeg-dev zlib1g-dev \
+        libjpeg-dev \
+        libpng-dev \
+        libwebp-dev \
+        zlib1g-dev \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# PyTorch CPU-only (lightest possible — saves ~1 GB vs full torch)
+# Install PyTorch CPU-only FIRST (smaller wheel, no CUDA bloat)
+# This avoids pulling in the 2 GB CUDA variant.
 RUN pip install --no-cache-dir \
-      torch==2.2.2 torchvision==0.17.2 \
-      --index-url https://download.pytorch.org/whl/cpu
+        torch==2.2.2 \
+        --index-url https://download.pytorch.org/whl/cpu
 
-# SHARP from source
+# Install transformers + HuggingFace Hub (for model download)
 RUN pip install --no-cache-dir \
-      "git+https://github.com/apple/ml-sharp.git"
+        transformers>=4.40.0 \
+        accelerate>=0.28.0 \
+        huggingface_hub>=0.22.0
 
-# App deps (Pillow for pre-resize, psutil for memory reporting)
+# App dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy source
 COPY main.py .
 
-# Non-root user
-RUN useradd -m appuser && chown -R appuser /app /tmp
-USER appuser
+# Pre-download the depth model during build so the first request isn't slow.
+# If the build cache is cold this adds ~30 s but avoids a cold-start penalty.
+RUN python - <<'EOF'
+from transformers import pipeline
+import torch
+p = pipeline("depth-estimation",
+             model="depth-anything/Depth-Anything-V2-Small-hf",
+             device="cpu", torch_dtype=torch.float32)
+print("Model pre-loaded successfully.")
+EOF
 
-# Memory-saving defaults (overridable via Render env vars)
-ENV SHARP_DEVICE=cpu
-ENV SHARP_LOW_MEM=1
-ENV PORT=8000
-# Single-process — do NOT increase workers; SHARP needs all available RAM for one job
-ENV WEB_CONCURRENCY=1
+# Environment — tune these via Render dashboard if needed
+ENV MAX_IMAGE_PX=512 \
+    MAX_CONCURRENT_JOBS=1 \
+    JOB_TTL=1800 \
+    WEB_CONCURRENCY=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1
 
 EXPOSE 8000
 

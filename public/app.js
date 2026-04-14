@@ -15,19 +15,19 @@ const BACKEND_IS_LOCAL =
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 const FUN_FACTS = [
-  "SHARP generates over 1 million tiny 3D blobs from a single photo.",
-  "Each blob remembers its colour from many different viewing angles.",
-  "3D Gaussian Splatting renders at 100+ FPS in your browser.",
-  "The model internally works at 1536 × 1536 resolution.",
-  "Your image never leaves your own server — complete privacy.",
-  "Apple's ML research team published SHARP as open-source software.",
-  "The result is a real 3D scene, not a flat image or video loop.",
+  "Depth Anything V2 reads every pixel and estimates how far away it is.",
+  "The depth map turns a flat photo into a real 3D point cloud.",
+  "3D Gaussian Splatting renders millions of points at 100+ FPS in your browser.",
+  "Each coloured point becomes a tiny 3D blob at its correct depth position.",
+  "Your photo is processed privately on our server — never shared.",
+  "Tilt and pan your phone to explore the scene from every angle.",
+  "The result is a genuine 3D scene you can walk through, not a video loop.",
 ];
 
 const PROC_STEPS = [
   { id: "read",    label: "Reading your photo" },
-  { id: "build",   label: "Building the 3D world" },
-  { id: "finish",  label: "Polishing the details" },
+  { id: "build",   label: "Estimating depth" },
+  { id: "finish",  label: "Building the 3D world" },
   { id: "ai",      label: "AI analysing scene" },
   { id: "viewer",  label: "Spinning up the viewer" },
 ];

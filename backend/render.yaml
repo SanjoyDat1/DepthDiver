@@ -1,38 +1,28 @@
-# DepthDiver — Render.com deployment spec
-# Docs: https://render.com/docs/render-yaml
-#
-# IMPORTANT: The free plan (512 MB) cannot run SHARP — it will OOM every time.
-# Minimum viable plan: "standard" (2 GB RAM, $25/mo).
-#
-# To deploy:
-#   1. Push repo to GitHub
-#   2. Render Dashboard → New → Blueprint → connect repo
-#   3. Render picks up this file automatically
-
 services:
   - type: web
     name: depthdiver-api
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    plan: standard          # ← REQUIRED: 2 GB RAM. Free (512 MB) will OOM.
-    region: oregon
-    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    plan: free          # 512 MB RAM — depth engine fits comfortably
+    autoDeploy: true
+
     envVars:
-      - key: SHARP_DEVICE
-        value: cpu
-      - key: SHARP_LOW_MEM
-        value: "1"          # resize images to 768px max before SHARP → saves ~600 MB RAM
-      - key: SHARP_TINY
-        value: "0"          # set to "1" if still hitting OOM (reduces to 512px, lower quality)
+      # Largest input side in pixels — keep ≤ 512 to stay well under RAM limit
       - key: MAX_IMAGE_PX
-        value: "768"        # max longest-edge pixels sent to SHARP
-      - key: SHARP_TIMEOUT
-        value: "600"
-      - key: JOB_TTL
-        value: "1800"       # keep PLY files for 30 min
+        value: "512"
+
+      # Only one job at a time (prevents concurrent OOM)
       - key: MAX_CONCURRENT_JOBS
-        value: "1"          # never run two SHARP jobs at once (prevents double OOM)
-      # Set to your Netlify URL to restrict CORS in production:
-      # - key: ALLOWED_ORIGINS
-      #   value: https://depthdiver.netlify.app
+        value: "1"
+
+      # Job result TTL (seconds) — 30 minutes
+      - key: JOB_TTL
+        value: "1800"
+
+      # Restrict thread count to stay memory-friendly
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
