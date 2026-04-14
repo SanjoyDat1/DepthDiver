@@ -498,6 +498,15 @@ async function createScene() {
 
 // ─── 3D Viewer ────────────────────────────────────────────────────────────────
 async function initViewer(plyUrl) {
+  // Guard: must be a proper URL ending in .ply (not a blob: URL).
+  // blob: URLs have no extension so GaussianSplats3D throws "File format not supported".
+  if (!plyUrl || plyUrl.startsWith("blob:") || !plyUrl.includes(".ply")) {
+    throw new Error(
+      `Viewer received an invalid URL (${plyUrl?.slice(0,60)}). ` +
+      "Expected a direct backend URL ending in /scene.ply."
+    );
+  }
+
   const wrap = $("#viewer-wrap");
   wrap.innerHTML = ""; // clear any old canvas
 

@@ -26,12 +26,15 @@
 [[headers]]
   for = "/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    # no-cache: browser must revalidate on every visit (sends conditional GET).
+    # Do NOT use "immutable" unless filenames include a content hash — immutable
+    # prevents browsers from ever fetching an updated file at the same URL.
+    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/index.html"
