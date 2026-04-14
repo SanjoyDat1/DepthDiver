@@ -528,26 +528,33 @@ async function initViewer(plyUrl) {
   loadWrap.classList.add("visible");
   loadBar.style.width = "0%";
 
-  const { Viewer } = await import(GSP_CDN);
+  // Import both Viewer and SceneFormat so we can tell the viewer that our
+  // blob URL contains a PLY file — blob: URLs have no extension, so the
+  // viewer can't auto-detect the format and throws "File format not supported".
+  const { Viewer, SceneFormat } = await import(GSP_CDN);
 
   const viewer = new Viewer({
-    selfDrivenMode:        true,
+    selfDrivenMode:         true,
     sharedMemoryForWorkers: false,
-    cameraUp:              [0, -1, 0],
-    initialCameraPosition: [-0.5, -3, 6],
-    initialCameraLookAt:   [0, 0, 0],
-    rootElement:           wrap,
+    cameraUp:               [0, -1, 0],
+    initialCameraPosition:  [-0.5, -3, 6],
+    initialCameraLookAt:    [0, 0, 0],
+    rootElement:            wrap,
   });
 
   S.viewer = viewer;
 
+  // SceneFormat.Ply = 0  (must be explicit because blob URLs have no extension)
+  const plyFormat = SceneFormat?.Ply ?? 0;
+
   await viewer.addSplatScene(plyUrl, {
+    format:                     plyFormat,
     splatAlphaRemovalThreshold: 5,
-    showLoadingUI: false,
+    showLoadingUI:              false,
     onProgress: (p) => {
       const pct = Math.round(p * 100);
       loadBar.style.width = `${pct}%`;
-      loadPct.textContent = `${pct}%`;
+      loadPct.textContent  = `${pct}%`;
     },
   });
 
