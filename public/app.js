@@ -305,6 +305,68 @@ async function callQuality(originalBase64, previewBase64, sceneData, apiKey, mod
   return res.json().catch(() => null);
 }
 
+// ─── Polling helpers ──────────────────────────────────────────────────────────
+
+/** Poll /jobs/{id}/status every 4 s until status is "done" or "failed". */
+async function pollUntilDone(jobId) {
+  const url      = `${BACKEND_URL}/jobs/${jobId}/status`;
+  const maxWait  = 15 * 60 * 1000; // 15 min absolute cap
+  const interval = 4000;
+  const started  = Date.now();
+
+  while (Date.now() - started < maxWait) {
+    await sleep(interval);
+
+    let data;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      data = await r.json();
+    } catch {
+      // Transient network hiccup — keep polling
+      continue;
+    }
+
+    if (data.status === "done")   return;
+    if (data.status === "failed") throw new Error(data.error || "3D generation failed on the server.");
+
+    // Update step label with a hint
+    const lbl = data.status === "processing"
+      ? "Building your 3D world…"
+      : "Starting up…";
+    setStep("build", "active", lbl);
+  }
+  throw new Error("Generation timed out after 15 minutes. Try a simpler photo.");
+}
+
+/** Simple sleep helper. */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/** Fetch with one automatic retry on transient network failure. */
+async function fetchWithRetry(url, options = {}, retries = 1) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await sleep(3000); // wait before retry
+    }
+  }
+}
+
+/** Convert a raw network TypeError into a readable message. */
+function networkFriendlyError(err) {
+  const msg = String(err?.message || err).toLowerCase();
+  if (msg.includes("load failed") || msg.includes("failed to fetch") || msg.includes("networkerror")) {
+    return new Error(
+      BACKEND_IS_LOCAL
+        ? "Backend not connected — deploy backend/ to Render and set BACKEND_URL in Netlify."
+        : `Cannot reach the backend at ${BACKEND_URL}. ` +
+          "Make sure your Render service is running (/health should return 200)."
+    );
+  }
+  return err;
+}
+
 // ─── Main pipeline ────────────────────────────────────────────────────────────
 async function createScene() {
   const errEl = $("#proc-error");
@@ -325,66 +387,67 @@ async function createScene() {
       setStep("ai", "done", "AI reading your photo");
     }
 
-    // Step 2: Send to SHARP backend
+    // Step 2: Submit image to SHARP backend (returns job_id immediately — no timeout risk)
     setStep("read",  "done");
-    setStep("build", "active", "Building the 3D world…");
+    setStep("build", "active", "Submitting your photo…");
 
     // Guard: backend not configured yet
     if (BACKEND_IS_LOCAL && location.protocol === "https:") {
       throw new Error(
-        "Backend not connected. " +
-        "The 3D generation service needs to be deployed separately (it can't run inside Netlify). " +
-        "Deploy the backend/ folder to Render.com, then set BACKEND_URL in your Netlify environment variables. " +
-        "See the README for step-by-step instructions."
+        "Backend not connected. Deploy the backend/ folder to Render.com, " +
+        "then add BACKEND_URL in Netlify environment variables. See README."
       );
     }
 
     const formData = new FormData();
     formData.append("file", S.file, S.file.name || "photo.jpg");
 
-    let res;
+    let submitRes;
     try {
-      res = await fetch(`${BACKEND_URL}/generate`, { method: "POST", body: formData });
+      submitRes = await fetchWithRetry(`${BACKEND_URL}/generate`, {
+        method: "POST", body: formData,
+      });
     } catch (networkErr) {
-      // Safari says "Load failed", Chrome says "Failed to fetch"
-      const msg = String(networkErr.message || networkErr);
-      if (msg.toLowerCase().includes("load failed") || msg.toLowerCase().includes("failed to fetch")) {
-        throw new Error(
-          BACKEND_IS_LOCAL
-            ? "Backend not connected — deploy backend/ to Render and set BACKEND_URL in Netlify."
-            : `Cannot reach the backend at ${BACKEND_URL}. ` +
-              "Check that your Render service is running (visit its /health URL) and that CORS is enabled."
-        );
-      }
-      throw networkErr;
+      throw networkFriendlyError(networkErr);
     }
 
-    if (!res.ok) {
-      let detail = `Backend error ${res.status}`;
-      if (res.status === 503) {
-        detail = "The 3D server is warming up (Render free tier). Wait 30 seconds and try again.";
-      } else if (res.status === 524 || res.status === 504) {
-        detail = "The 3D generation took too long and timed out. Try a simpler photo, or upgrade the Render plan.";
-      } else {
-        try { const j = await res.json(); detail = j.detail || detail; } catch {}
+    if (!submitRes.ok) {
+      const detail = await submitRes.json().then(j => j.detail).catch(() => `Error ${submitRes.status}`);
+      if (submitRes.status === 503) {
+        throw new Error("The 3D server is waking up (Render free tier cold start). " +
+          "Wait 30 s then tap Try again.");
       }
       throw new Error(detail);
     }
 
-    // Step 3: stream PLY bytes back (can be 30–150 MB)
+    const { job_id } = await submitRes.json();
+    setStep("build", "active", "Building the 3D world…");
+
+    // Step 3: Poll until SHARP finishes (no long-lived connection = no Cloudflare timeout)
+    await pollUntilDone(job_id);
     setStep("build",  "done");
     setStep("finish", "active", "Downloading your 3D scene…");
 
-    let S_plyBytes;
+    // Step 4: Download the finished .ply
+    let plyRes;
     try {
-      S_plyBytes = await res.arrayBuffer();
-    } catch (dlErr) {
-      throw new Error(
-        "The 3D file started downloading but the connection dropped. " +
-        "This can happen on a weak mobile signal. Please try again."
-      );
+      plyRes = await fetchWithRetry(`${BACKEND_URL}/jobs/${job_id}/result`);
+    } catch (networkErr) {
+      throw networkFriendlyError(networkErr);
     }
-    S.plyBytes = S_plyBytes;
+    if (!plyRes.ok) {
+      const d = await plyRes.json().then(j => j.detail).catch(() => `Error ${plyRes.status}`);
+      throw new Error(d);
+    }
+
+    let plyBytes;
+    try {
+      plyBytes = await plyRes.arrayBuffer();
+    } catch {
+      throw new Error("Download dropped — check your signal and try again.");
+    }
+
+    S.plyBytes = plyBytes;
     const plyBlob = new Blob([S.plyBytes], { type: "application/octet-stream" });
     if (S.plyUrl) URL.revokeObjectURL(S.plyUrl);
     S.plyUrl = URL.createObjectURL(plyBlob);
