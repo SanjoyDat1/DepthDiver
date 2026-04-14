@@ -1,0 +1,28 @@
+# DepthDiver — Render.com deployment spec
+# Docs: https://render.com/docs/render-yaml
+#
+# To deploy:
+#   1. Push this repo to GitHub
+#   2. Go to https://dashboard.render.com → New → Blueprint
+#   3. Connect your repo — Render picks up this file automatically
+
+services:
+  - type: web
+    name: depthdiver-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free           # Upgrade to "starter" for always-on (free spins down)
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: SHARP_DEVICE
+        value: cpu
+      - key: SHARP_TIMEOUT
+        value: "300"
+      # Set ALLOWED_ORIGINS to your Netlify URL, e.g.:
+      # - key: ALLOWED_ORIGINS
+      #   value: https://your-site.netlify.app
+      # Set SHARP_CHECKPOINT_PATH if you have a custom model checkpoint:
+      # - key: SHARP_CHECKPOINT_PATH
+      #   value: /path/to/sharp_checkpoint.pt

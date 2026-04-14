@@ -1,0 +1,42 @@
+# DepthDiver — Netlify configuration
+
+[build]
+  # Patches config.js with $BACKEND_URL if set, then serves public/
+  command   = "[ -n \"$BACKEND_URL\" ] && sed -i.bak \"s|http://localhost:8000|$BACKEND_URL|g\" public/config.js && rm -f public/config.js.bak || true"
+  publish   = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# ── Security & COOP headers ───────────────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options              = "DENY"
+    X-Content-Type-Options       = "nosniff"
+    Referrer-Policy              = "strict-origin-when-cross-origin"
+    # SharedArrayBuffer needed by GaussianSplats3D web workers
+    Cross-Origin-Opener-Policy   = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# ── SPA fallback ──────────────────────────────────────────────────────────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

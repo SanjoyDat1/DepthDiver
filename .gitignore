@@ -1,0 +1,59 @@
+# ── Secrets — NEVER commit these ─────────────────────────────────
+.env
+*.env
+.env.local
+.env.*.local
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+
+# ── SHARP / ML artefacts ──────────────────────────────────────────
+*.pt
+*.ckpt
+*.safetensors
+sharp_weights/
+
+# ── Gradio / temp output ──────────────────────────────────────────
+gradio_cached_examples/
+tmp/
+/tmp/
+*.ply              # generated 3D files — can be large
+*.splat
+
+# ── macOS ─────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# ── Node (Netlify CLI / local dev) ────────────────────────────────
+node_modules/
+.netlify/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Editor ────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ──────────────────────────────────────────────────────────
+*.log
+logs/

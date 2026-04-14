@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="description" content="Turn any photo into a 3D world you can walk through — powered by AI." />
+  <meta property="og:title"       content="DepthDiver" />
+  <meta property="og:description" content="Turn any photo into a 3D world you can walk through." />
+  <title>DepthDiver — Turn any photo into 3D</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ════════════════════════════════════════════════════════
+       SCREEN 1 — Upload
+       ════════════════════════════════════════════════════════ -->
+  <section class="screen active" id="screen-upload">
+
+    <header class="hero">
+      <h1>DepthDiver</h1>
+      <p>Turn any photo into a 3D world you can walk through</p>
+    </header>
+
+    <div class="steps-guide">
+      <div class="step-pill"><div class="step-num">1</div> Pick a photo</div>
+      <span class="step-arrow">›</span>
+      <div class="step-pill"><div class="step-num">2</div> We build the 3D</div>
+      <span class="step-arrow">›</span>
+      <div class="step-pill"><div class="step-num">3</div> Explore it</div>
+    </div>
+
+    <!-- Config warning (shown when backend URL is still localhost) -->
+    <div id="config-warning" hidden>
+      <strong>⚠ Backend not connected.</strong>
+      You're running locally or the backend URL is not yet set.
+      See <a href="https://github.com/your-repo/DepthDiver#deploy" target="_blank">deployment guide</a>
+      or edit <code>public/config.js</code>.
+    </div>
+
+    <!-- Drop / upload zone -->
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="image/*" aria-label="Choose a photo" />
+      <img id="preview-img" alt="Your photo preview" hidden />
+      <div class="drop-placeholder">
+        <div class="drop-icon">📷</div>
+        <div class="drop-main">Tap to choose a photo</div>
+        <div class="drop-sub">or drag one here · JPEG / PNG · any size</div>
+      </div>
+      <div class="change-overlay">Tap to change</div>
+    </div>
+
+    <p class="upload-tip">Works best with outdoor scenes, rooms, or objects with clear depth.</p>
+
+    <!-- Mode selection -->
+    <p class="section-label">Choose mode</p>
+    <div class="mode-cards">
+      <label class="mode-card">
+        <input type="radio" name="mode" value="free" checked />
+        <div class="mode-radio-dot"></div>
+        <div class="mode-info">
+          <strong>Free 3D <span class="mode-badge badge-free">Free</span></strong>
+          <span>Just the 3D scene — no API key needed.</span>
+        </div>
+      </label>
+      <label class="mode-card">
+        <input type="radio" name="mode" value="ai" />
+        <div class="mode-radio-dot"></div>
+        <div class="mode-info">
+          <strong>3D + AI insights <span class="mode-badge badge-ai">AI</span></strong>
+          <span>Scene analysis, quality score &amp; camera tour tips from Claude.</span>
+        </div>
+      </label>
+    </div>
+
+    <!-- AI key field (hidden until AI mode selected) -->
+    <div id="ai-key-section" hidden>
+      <label for="ai-key-input">Anthropic API key</label>
+      <input id="ai-key-input" type="password" autocomplete="off"
+             placeholder="sk-ant-api03-…" spellcheck="false" />
+      <div class="key-help">
+        <span>Your key is never stored or logged.</span>
+        <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener">
+          Get a free key →
+        </a>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn btn-primary" id="create-btn" disabled>
+        Create 3D &nbsp;→
+      </button>
+      <button class="btn btn-secondary" id="example-btn">
+        Try a sample photo
+      </button>
+    </div>
+
+  </section><!-- /screen-upload -->
+
+
+  <!-- ════════════════════════════════════════════════════════
+       SCREEN 2 — Processing
+       ════════════════════════════════════════════════════════ -->
+  <section class="screen" id="screen-processing">
+    <div class="proc-card">
+      <div class="proc-ring"></div>
+      <div class="proc-title" id="proc-title">Getting started…</div>
+      <div class="proc-sub"  id="proc-sub">This usually takes 30 – 90 seconds</div>
+
+      <div class="proc-steps" id="proc-steps"><!-- filled by JS --></div>
+
+      <div class="proc-elapsed" id="proc-elapsed">0s elapsed</div>
+      <div class="proc-fact"    id="proc-fact"></div>
+    </div>
+
+    <!-- Error card (shown on failure) -->
+    <div id="proc-error">
+      <strong id="proc-err-title">Something went wrong</strong>
+      <span id="proc-err-msg"></span>
+      <br />
+      <button class="retry-btn" onclick="window.location.reload()">← Try again</button>
+    </div>
+  </section><!-- /screen-processing -->
+
+
+  <!-- ════════════════════════════════════════════════════════
+       SCREEN 3 — Ready (full-screen viewer + bottom sheet)
+       ════════════════════════════════════════════════════════ -->
+  <section class="screen" id="screen-ready">
+
+    <!-- 3D viewer (fills viewport) -->
+    <div id="viewer-wrap"></div>
+
+    <!-- Logo watermark -->
+    <div id="viewer-badge">DepthDiver</div>
+
+    <!-- Drag hint -->
+    <div class="viewer-hint" id="viewer-hint"></div>
+
+    <!-- Loading bar (while PLY transfers to GPU) -->
+    <div id="viewer-load-wrap">
+      <div id="viewer-load-bar-bg"><div id="viewer-load-bar"></div></div>
+      <div id="viewer-load-pct">0%</div>
+    </div>
+
+    <!-- Viewer controls (top-right) -->
+    <div id="viewer-controls">
+      <button class="vbtn" id="vbtn-reset" title="Reset view">⟳</button>
+      <button class="vbtn" id="vbtn-spin"  title="Auto-spin">↺ Spin</button>
+      <button class="vbtn" id="vbtn-gyro"  title="Tilt to look">📡 Motion</button>
+      <button class="vbtn" id="vbtn-fs"    title="Full screen">⛶</button>
+    </div>
+
+    <!-- Bottom sheet -->
+    <div id="bottom-sheet">
+      <!-- Drag handle -->
+      <div class="sheet-handle-row" aria-label="Drag to expand">
+        <div class="sheet-handle"></div>
+      </div>
+
+      <!-- Peek row (always visible) -->
+      <div class="sheet-peek">
+        <div class="sheet-ready-badge">Your 3D is ready!</div>
+        <button class="dl-btn" id="sheet-dl" aria-label="Download PLY file">
+          ↓ Save 3D file
+        </button>
+      </div>
+
+      <!-- Scrollable detail area -->
+      <div class="sheet-scroll" id="sheet-scroll">
+
+        <!-- SuperSplat -->
+        <div class="result-label">Open in full viewer</div>
+        <a id="sheet-supersplat" href="https://supersplat.playcanvas.com"
+           target="_blank" rel="noopener" class="supersplat-link">
+          🌐 SuperSplat — full browser viewer
+        </a>
+        <p style="font-size:0.78rem;color:var(--sub);margin-top:6px">
+          Download the 3D file above, then drag it onto SuperSplat to view it in full screen.
+        </p>
+
+        <div class="result-divider"></div>
+
+        <!-- AI scene card -->
+        <div id="sheet-ai" hidden>
+          <div id="scene-card"></div>
+          <div class="result-divider"></div>
+        </div>
+
+        <!-- AI quality card -->
+        <div id="sheet-qa" hidden>
+          <div id="qa-card"></div>
+          <div class="result-divider"></div>
+        </div>
+
+        <!-- Create another -->
+        <button class="create-another" id="create-another-btn">
+          ← Create another
+        </button>
+
+      </div><!-- /sheet-scroll -->
+    </div><!-- /bottom-sheet -->
+
+  </section><!-- /screen-ready -->
+
+</div><!-- /app -->
+
+<!-- Config — edit backendUrl before deploying -->
+<script src="/config.js"></script>
+<!-- Main app -->
+<script type="module" src="/app.js"></script>
+</body>
+</html>
