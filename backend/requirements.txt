@@ -1,10 +1,9 @@
-# DepthDiver backend — Python dependencies
-# Install: pip install -r requirements.txt
-
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9
+Pillow>=10.0.0       # image resizing before SHARP to reduce RAM usage
+psutil>=5.9.0        # memory reporting in /health endpoint
 
-# SHARP is installed separately — see README for instructions:
+# SHARP is installed separately in the Dockerfile:
 # pip install git+https://github.com/apple/ml-sharp.git
-# (also requires: torch, torchvision)
+# (also requires: torch, torchvision — installed in Dockerfile)
